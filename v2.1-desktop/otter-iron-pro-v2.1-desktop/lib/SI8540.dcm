@@ -1,0 +1,9 @@
+EESchema-DOCLIB  Version 2.0
+#
+$CMP SI8540
+D High-Side Current Sense Amplifier
+K High-Side Current Sense Amplifier
+F https://www.silabs.com/documents/public/data-sheets/Si8540.pdf
+$ENDCMP
+#
+#End Doc Library

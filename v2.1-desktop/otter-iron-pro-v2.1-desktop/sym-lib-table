@@ -1,3 +1,4 @@
 (sym_lib_table
   (lib (name OtterIron_Devkit-rescue)(type Legacy)(uri /home/rleh/src/Otter-Iron-PRO/v2.0/Bottom/OtterIron_Devkit-rescue.lib)(options "")(descr ""))
+  (lib (name SI8540)(type Legacy)(uri ${KIPRJMOD}/lib/SI8540.lib)(options "")(descr ""))
 )
