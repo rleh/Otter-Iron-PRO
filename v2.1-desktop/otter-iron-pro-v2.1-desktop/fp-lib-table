@@ -1,0 +1,5 @@
+(fp_lib_table
+  (lib (name C245)(type KiCad)(uri ${KIPRJMOD}/lib/C245.pretty)(options "")(descr ""))
+  (lib (name OLED_SSD1306_14pin)(type KiCad)(uri ${KIPRJMOD}/lib/OLED_SSD1306_14pin.pretty)(options "")(descr ""))
+  (lib (name 4mm-banana-test-jack)(type KiCad)(uri ${KIPRJMOD}/lib/4mm-banana-test-jack.pretty)(options "")(descr ""))
+)
