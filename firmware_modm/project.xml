@@ -27,5 +27,6 @@
     <module>modm:platform:clock</module>
     <module>modm:math:filter</module>
     <module>modm:tinyusb</module>
+    <module>modm:driver:adc_sampler</module>
   </modules>
 </library>

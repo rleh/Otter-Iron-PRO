@@ -184,17 +184,7 @@ namespace AnalogReadings {
     };
 
     static constexpr float tipCalOffset  = 120.0f;
-    static constexpr float tipCalCoeff   = 92.0f; 
-
-    Readings readAll(){
-        Readings r; 
-        // copied from original otter iron firmware
-        r.tRef = (((static_cast<float>(Adc::readChannel(Adc::Channel::In5))/4095.0f)*3.3f)-0.5f)/0.01f;
-        r.tTip = ((static_cast<float>(Adc::readChannel(Adc::Channel::In1))-tipCalOffset)*tipCalCoeff)/1000.0f+r.tRef;
-        r.uIn = (static_cast<float>(Adc::readChannel(Adc::Channel::In2))/4095.0f)*3.3f*6.6f;
-        r.iIn = (static_cast<float>(Adc::readChannel(Adc::Channel::In0)/4095.0f)*3.3f*1.659f)/(0.01f*(2370.0f/33.0f));
-        return r;
-    }
+    static constexpr float tipCalCoeff   = 92.0f;
 
 }
 } // namespace Iron

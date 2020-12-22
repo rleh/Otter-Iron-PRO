@@ -12,6 +12,8 @@
 #include <modm/processing/timer.hpp>
 #include <modm/processing/protothread.hpp>
 #include <modm/debug/logger.hpp>
+#include <modm/architecture/interface/adc_interrupt.hpp>
+#include <modm/driver/adc/adc_sampler.hpp>
 
 #include <array>
 #include <chrono>
@@ -21,18 +23,11 @@
 #include "hardware.hpp"
 
 
-// modm::IODeviceWrapper<modm::platform::UsbUart0, modm::IOBuffer::DiscardIfFull> loggerDevice;
-// modm::log::Logger modm::log::debug(loggerDevice);
-// modm::log::Logger modm::log::info(loggerDevice);
-// modm::log::Logger modm::log::warning(loggerDevice);
-// modm::log::Logger modm::log::error(loggerDevice);
-
-//modm::IODeviceWrapper< Usart1, modm::IOBuffer::BlockIfFull > loggerDevice;
-// Set all four logger streams to use the UART
-// modm::log::Logger modm::log::debug(loggerDevice);
-// modm::log::Logger modm::log::info(loggerDevice);
-// modm::log::Logger modm::log::warning(loggerDevice);
-// modm::log::Logger modm::log::error(loggerDevice);
+modm::IODeviceWrapper<modm::platform::UsbUart0, modm::IOBuffer::DiscardIfFull> loggerDevice;
+modm::log::Logger modm::log::debug(loggerDevice);
+modm::log::Logger modm::log::info(loggerDevice);
+modm::log::Logger modm::log::warning(loggerDevice);
+modm::log::Logger modm::log::error(loggerDevice);
 
 using namespace std::literals::chrono_literals;
 
@@ -40,17 +35,24 @@ using namespace std::literals::chrono_literals;
 
 modm::Pid<float, 1> pid;
 
-class AdcThread : public modm::pt::Protothread
+
+class AdcThread2 : public modm::pt::Protothread
 {
 public:
-    AdcThread() : adcTimer(2ms) {
+    AdcThread2() : adcTimer(2ms) {
+		modm::platform::Adc::enableInterruptVector(5);
+		modm::platform::Adc::enableInterrupt(modm::platform::Adc::Interrupt::EndOfConversion);
+
+		sensors::initialize(sensorMapping, sensorData);
+		sensors::startReadout();
     }
 
     bool update() {
         PT_BEGIN();
         while(1) {
-            PT_WAIT_UNTIL(adcTimer.execute());
-            r = Iron::AnalogReadings::readAll();
+            PT_WAIT_UNTIL(adcTimer.execute() && sensors::isReadoutFinished());
+            // r = Iron::AnalogReadings::readAll();
+            r = readAll();
 			UTILS_LP_FAST(iInLp, r.iIn, 0.05);
 			UTILS_LP_FAST(tTipLp, r.tTip, 0.05);
             PT_YIELD();
@@ -64,12 +66,69 @@ public:
 	float getTRef() const { return r.tRef; };
 
 private:
+    Iron::AnalogReadings::Readings readAll(){
+        Iron::AnalogReadings::Readings r; 
+        // copied from original otter iron firmware
+		sensorData = sensors::getData();
+        r.tRef = (((static_cast<float>(sensorData[3])/4095.0f)*3.3f)-0.5f)/0.01f;
+        r.tTip = ((static_cast<float>(sensorData[1])-Iron::AnalogReadings::tipCalOffset)*Iron::AnalogReadings::tipCalCoeff)/1000.0f+r.tRef;
+        r.uIn = (static_cast<float>(sensorData[2])/4095.0f)*3.3f*6.6f;
+        r.iIn = (static_cast<float>(sensorData[0]/4095.0f)*3.3f*1.659f)/(0.01f*(2370.0f/33.0f));
+        return r;
+    }
+
     modm::PeriodicTimer adcTimer;
 	Iron::AnalogReadings::Readings r; 
 	float tTipLp; // low-pass filtered tip temperature in [°C]
 	float iInLp; // low-pass filtered input current [A]
+
+	static constexpr modm::platform::Adc::Channel sensorMapping[4] {
+		modm::platform::Adc::getPinChannel<Iron::AnalogReadings::AdcIn0_iIn>(),
+		modm::platform::Adc::getPinChannel<Iron::AnalogReadings::AdcIn1_tTip>(),
+		modm::platform::Adc::getPinChannel<Iron::AnalogReadings::AdcIn2_uIn>(),
+		modm::platform::Adc::getPinChannel<Iron::AnalogReadings::AdcIn5_tRef>(),
+	};
+
+	// 3 channels and averages of 100 oversamples
+	using sensors = modm::AdcSampler< modm::platform::AdcInterrupt, 4, 100 >;
+
+	// the results are up to 16 bit wide
+	sensors::DataType* sensorData;
+
 };
-AdcThread adcThread;
+AdcThread2 adcThread;
+
+
+// class AdcThread : public modm::pt::Protothread
+// {
+// public:
+//     AdcThread() : adcTimer(2ms) {
+//     }
+
+//     bool update() {
+//         PT_BEGIN();
+//         while(1) {
+//             PT_WAIT_UNTIL(adcTimer.execute());
+//             r = Iron::AnalogReadings::readAll();
+// 			UTILS_LP_FAST(iInLp, r.iIn, 0.05);
+// 			UTILS_LP_FAST(tTipLp, r.tTip, 0.05);
+//             PT_YIELD();
+//         }
+//         PT_END();
+//     }
+	
+// 	float getIInLp() const { return iInLp; };
+// 	float getUIn() const { return r.uIn; };
+// 	float getTTipLp() const { return tTipLp; };
+// 	float getTRef() const { return r.tRef; };
+
+// private:
+//     modm::PeriodicTimer adcTimer;
+// 	Iron::AnalogReadings::Readings r; 
+// 	float tTipLp; // low-pass filtered tip temperature in [°C]
+// 	float iInLp; // low-pass filtered input current [A]
+// };
+// AdcThread adcThread;
 
 class PidThread : public modm::pt::Protothread
 {
