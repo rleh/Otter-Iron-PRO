@@ -90,13 +90,13 @@ namespace usb
 
 
 namespace Ui {
-	using ButtonUp = GpioC13; // SW2 on silk, has external pulldown
-	using ButtonDown = GpioA3; // SW1 on silk
+	using ButtonUp = GpioA3; // SW2 on silk, has external pulldown
+	using ButtonDown = GpioC13; // SW1 on silk
 
 	inline void
 	initialize()
 	{
-		ButtonUp::setInput();
+		ButtonUp::setInput(ButtonUp::InputType::PullDown);
 		ButtonDown::setInput(ButtonDown::InputType::PullDown);
 	}
 }
@@ -112,7 +112,7 @@ namespace Display {
 	initialize()
 	{
         MyI2cMaster::connect<Scl::Scl, Sda::Sda>();
-        MyI2cMaster::initialize<Iron::SystemClock, 400_kHz>();
+        MyI2cMaster::initialize<Iron::SystemClock, 1200_kHz>();
 
         display.initializeBlocking();
 		display.setFont(modm::font::Assertion);
@@ -125,7 +125,7 @@ namespace Display {
 namespace Pwm {
 	using Timer = Timer1;
 	using Pin = GpioOutputA8;
-	static uint16_t Overflow = 4800;
+	static uint16_t Overflow = 2400;
 
 	inline void
 	initialize()
@@ -134,8 +134,8 @@ namespace Pwm {
 		Timer::connect<Pin::Ch1>();
 		Timer::enable();
 		Timer::setMode(Timer::Mode::UpCounter);
-		// Pwm frequency: 10kHz
-		Timer::setPrescaler(1); // 48 * 1000 * 1000 / 10000 / 4800 = 1
+		// Pwm frequency: 20kHz
+		Timer::setPrescaler(1); // 48 * 1000 * 1000 / 10000 / 2400 = 1
 		Timer::setOverflow(Overflow);
 		Timer::configureOutputChannel(1, Timer::OutputCompareMode::Pwm, 0);
 		Timer::applyAndReset();

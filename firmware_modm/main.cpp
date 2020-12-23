@@ -43,7 +43,7 @@ modm::Pid<float, 1> pid;
 class AdcThread : public modm::pt::Protothread
 {
 public:
-    AdcThread() : adcTimer(2ms) {
+    AdcThread() : adcTimer(100us) {
     }
 
     bool update() {
@@ -51,8 +51,11 @@ public:
         while(1) {
             PT_WAIT_UNTIL(adcTimer.execute());
             r = Iron::AnalogReadings::readAll();
-			UTILS_LP_FAST(iInLp, r.iIn, 0.05);
-			UTILS_LP_FAST(tTipLp, r.tTip, 0.05);
+			r.tTip -= r.tRef;
+			r.tTip += tRefLp;
+			UTILS_LP_FAST(iInLp, r.iIn, 0.001);
+			UTILS_LP_FAST(tTipLp, r.tTip, 0.001);
+			UTILS_LP_FAST(tRefLp, r.tRef, 0.001);
             PT_YIELD();
         }
         PT_END();
@@ -61,13 +64,14 @@ public:
 	float getIInLp() const { return iInLp; };
 	float getUIn() const { return r.uIn; };
 	float getTTipLp() const { return tTipLp; };
-	float getTRef() const { return r.tRef; };
+	float getTRef() const { return tRefLp; };
 
 private:
-    modm::PeriodicTimer adcTimer;
+    modm::ShortPrecisePeriodicTimer adcTimer;
 	Iron::AnalogReadings::Readings r; 
 	float tTipLp; // low-pass filtered tip temperature in [°C]
 	float iInLp; // low-pass filtered input current [A]
+	float tRefLp;  // low-pass filtered reference temperature in [°C]
 };
 AdcThread adcThread;
 
@@ -89,10 +93,11 @@ public:
 			if(true) {
 				PT_WAIT_UNTIL(pidTimer.execute());
 				tTipLp = adcThread.getTTipLp();
-				if( 0.0f <= tTipLp && tTipLp <= 400.0f ) {
+				if( 0.0f <= tTipLp && tTipLp <= 700.0f ) { // FIXME
 					pid.update(tSetpoint - tTipLp );
-					// 800/2000 since we use PID values from original otter iron firmware 
-					duty = std::max<float>(0.0f, pid.getValue())*800.0f/2000.0f;
+					// 800/2000 since we use PID values from original otter iron firmware
+					// duty = std::max<float>(0.0f, pid.getValue())*800.0f/2000.0f;
+					duty = std::max<float>(0.0f, pid.getValue())/10.0f;
 					duty = std::max<float>(0, std::min<float>(1.0f, duty));
 					Iron::Pwm::setDuty(duty);
 				}
@@ -129,7 +134,7 @@ class UiThread : public modm::pt::Protothread
 {
 public:
 	UiThread() :
-		inputTimer(20ms),
+		inputTimer(100ms),
 		displayTimer(200ms)
 	{
 	}
