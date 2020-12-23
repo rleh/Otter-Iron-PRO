@@ -1,0 +1,5 @@
+build/
+modm/
+project.xml.log
+SConstruct
+.sconsign.dblite
