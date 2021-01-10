@@ -43,19 +43,23 @@ modm::Pid<float, 1> pid;
 class AdcThread : public modm::pt::Protothread
 {
 public:
-    AdcThread() : adcTimer(100us) {
+    AdcThread() : adcTimer(1ms) {
     }
 
     bool update() {
         PT_BEGIN();
         while(1) {
             PT_WAIT_UNTIL(adcTimer.execute());
+			lastDuty = Iron::Pwm::getDuty();
+			Iron::Pwm::disable();
+			modm::delay(50us);
             r = Iron::AnalogReadings::readAll();
+			Iron::Pwm::setDuty(lastDuty);
 			r.tTip -= r.tRef;
 			r.tTip += tRefLp;
-			UTILS_LP_FAST(iInLp, r.iIn, 0.001);
-			UTILS_LP_FAST(tTipLp, r.tTip, 0.001);
-			UTILS_LP_FAST(tRefLp, r.tRef, 0.001);
+			UTILS_LP_FAST(iInLp, r.iIn, 0.01);
+			UTILS_LP_FAST(tTipLp, r.tTip, 0.01);
+			UTILS_LP_FAST(tRefLp, r.tRef, 0.01);
             PT_YIELD();
         }
         PT_END();
@@ -66,12 +70,17 @@ public:
 	float getTTipLp() const { return tTipLp; };
 	float getTRef() const { return tRefLp; };
 
+	float getTipResistance() const {
+		return 2.6f;
+	}
+
 private:
     modm::ShortPrecisePeriodicTimer adcTimer;
 	Iron::AnalogReadings::Readings r; 
 	float tTipLp; // low-pass filtered tip temperature in [°C]
 	float iInLp; // low-pass filtered input current [A]
 	float tRefLp;  // low-pass filtered reference temperature in [°C]
+	float lastDuty;
 };
 AdcThread adcThread;
 
@@ -97,8 +106,10 @@ public:
 					pid.update(tSetpoint - tTipLp );
 					// 800/2000 since we use PID values from original otter iron firmware
 					// duty = std::max<float>(0.0f, pid.getValue())*800.0f/2000.0f;
-					duty = std::max<float>(0.0f, pid.getValue())/10.0f;
-					duty = std::max<float>(0, std::min<float>(1.0f, duty));
+					dutyLimit = adcThread.getTipResistance() * powerLimit / (adcThread.getUIn()*adcThread.getUIn()); 
+					dutyLimit = std::min<float>(dutyLimit, 1.0f);
+					duty = std::max<float>(0.0f, pid.getValue())*adcThread.getTipResistance()/ ( adcThread.getUIn()*adcThread.getUIn() );
+					duty = std::max<float>(0, std::min<float>(dutyLimit, duty));
 					Iron::Pwm::setDuty(duty);
 				}
 				else {
@@ -117,10 +128,12 @@ public:
 
 	float tSetpoint;
 	float duty;
+	float dutyLimit;
 
 private:
 	modm::PeriodicTimer pidTimer;
 	float tTipLp;
+	float powerLimit = 60; // [W]
 
 };
 PidThread pidThread;
@@ -233,8 +246,8 @@ int main()
 	* use PID with [K] temperatures
 	*/
 	pid.setParameter(modm::Pid<float, 1>::Parameter( 
-		0.5f,	// Kp
-		1.0f,	// Ki
+		2.0f,	// Kp
+		4.0f,	// Ki
 		0.0f, 		// Kd
 		10.0f,  	// err_I limit
 		Iron::Pwm::Overflow)); // output limit

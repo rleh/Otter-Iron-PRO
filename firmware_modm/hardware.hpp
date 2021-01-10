@@ -147,7 +147,16 @@ namespace Pwm {
 	set(uint16_t value)
 	{
 		Timer::setCompareValue(1, value);
+		
 	}
+
+	inline uint16_t
+	get()
+	{
+		return Timer::getCompareValue(1);
+		
+	}
+
 
     // Use duty [0...1]
     inline void 
@@ -155,6 +164,11 @@ namespace Pwm {
         duty = std::max<float>(0, std::min<float>(1.0f, duty));
         set(duty * Overflow);
     }
+
+	inline float
+	getDuty() {
+		return float(get()) / float(Overflow);
+	}
 
 	inline void
 	disable()
