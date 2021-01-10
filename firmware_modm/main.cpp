@@ -20,6 +20,7 @@
 
 #include "hardware.hpp"
 
+#include "stusb4500.hpp"
 
 // modm::IODeviceWrapper<modm::platform::UsbUart0, modm::IOBuffer::DiscardIfFull> loggerDevice;
 // modm::log::Logger modm::log::debug(loggerDevice);
@@ -39,6 +40,8 @@ using namespace std::literals::chrono_literals;
 #define UTILS_LP_FAST(value, sample, filter_constant)	(value -= (filter_constant) * ((value) - (sample)))
 
 modm::Pid<float, 1> pid;
+
+Stusb4500<Iron::Display::MyI2cMaster> usb{};
 
 class AdcThread : public modm::pt::Protothread
 {
