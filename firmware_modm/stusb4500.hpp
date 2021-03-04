@@ -33,12 +33,11 @@ protected:
 };
 
 template<class I2cMaster>
-class Stusb4500 : public stusb4500,  public I2cDevice< I2cMaster, 4 >
+class Stusb4500 : public stusb4500,  public modm::I2cDevice< I2cMaster, 4 >
 {
-
 public:
     inline Stusb4500(uint8_t address=0x28):
-    I2cDevice<I2cMaster,4>(address) {};
+    modm::I2cDevice<I2cMaster,4>(address) {};
 
     inline modm::ResumableResult<RdoRegStatusData>
     getRdoRegStatus( ) {
@@ -46,7 +45,7 @@ public:
         readRegister<4>(Register::RdoRegStatus, reinterpret_cast<uint8_t*>(&buffer2));
         // FIXME: Endianess?!?
         rdoRegStatusData.MaxCurrent = buffer2 & 0b11'1111'1111;
-        rdoRegStatusData.OperationCurrent = (buffer2 >> 10) & 0b11'1111'1111;
+        rdoRegStatusData.OperatingCurrent = (buffer2 >> 10) & 0b11'1111'1111;
         rdoRegStatusData.ObjectPos = (buffer2 >> 28) & 0b111;
         RF_END_RETURN(rdoRegStatusData);
     }
@@ -58,7 +57,7 @@ public:
         readRegister<4>(DpmSnkPdos.at(pdoNumber), reinterpret_cast<uint8_t*>(&buffer2));
         // FIXME: Endianess?!?
         buffer2 = (buffer2 & ~0b11'1111'1111ul) | ((current / 10) & 0b11'1111'1111);
-        buffer2 = (buffer2 & ((~0b11'1111'1111ul) << 10) | (((voltage / 50) & 0b11'1111'1111) << 10);
+        buffer2 = (buffer2 & ((~0b11'1111'1111ul) << 10)) | (((voltage / 50) & 0b11'1111'1111) << 10);
         updateRegister<4>(DpmSnkPdos.at(pdoNumber), reinterpret_cast<uint8_t*>(&buffer2));
         RF_END();
 	}
@@ -74,30 +73,30 @@ public:
 private:
     template<uint32_t length> 
     inline modm::ResumableResult<bool>
-	readRegister(Register reg, std::array<uint8_t, length>& output)
+	readRegister(Register reg, uint8_t* output)
 	{
 		RF_BEGIN();
 		buffer[0] = uint8_t(reg);
-		this->transaction.configureWriteRead(buffer, 1, output.data(), length);
+		this->transaction.configureWriteRead(buffer.data(), 1, output, length);
 		RF_END_RETURN_CALL( this->runTransaction() );
 	}
 
     template<uint32_t length> 
 	inline modm::ResumableResult<bool>
-	updateRegister(Register reg, const std::array<uint8_t, length>& data)
+	updateRegister(Register reg, uint8_t* data)
 	{
 		RF_BEGIN();
 		buffer.at(0) = uint8_t(reg);
         // static_assert(length <= 4, "buffer too small, rleh is sad");
-        std::copy(std::begin(data), std::end(data), ++std::begin(buffer));
-		this->transaction.configureWriteRead(buffer, length + 1, nullptr, 0);
+        std::memcpy(&buffer.at(1), data, 4);
+		this->transaction.configureWriteRead(buffer.data(), length + 1, nullptr, 0);
 		RF_END_RETURN_CALL( this->runTransaction() );
 	}
     
 private: 
-    static constexpr std::array<Register> DpmSnkPdos {Register::DpmSnkPdo1, Register::DpmSnkPdo2, Register::DpmSnkPdo}; 
+    static constexpr std::array<Register, 3> DpmSnkPdos {Register::DpmSnkPdo1, Register::DpmSnkPdo2, Register::DpmSnkPdo3}; 
     std::array<uint8_t, 5> buffer;
     uint32_t buffer2;
     RdoRegStatusData rdoRegStatusData;
 
-}
+};

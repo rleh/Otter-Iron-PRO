@@ -234,16 +234,39 @@ int main()
 	// modm::delay(100ms);
 	// MODM_LOG_INFO << "Connection Successfull" << modm::endl;
 
+
 	Iron::Pwm::initialize();
 	Iron::Display::initialize();
 	Iron::AnalogReadings::initialize();
 	Iron::Ui::initialize();
 
-
-	Iron::Display::display.setCursor(0,32);
-	Iron::Display::display.printf("ping");
+	// Iron::Display::display.setCursor(0,0);
+	// Iron::Display::display.printf("Docker build");
+	Iron::Display::display.setCursor(0,0);
+	Iron::Display::display.printf("USB PD... ");
 	Iron::Display::display.update();
 
+	usb.configurePdo(0, 5000, 500);
+	usb.configurePdo(1, 12000, 2000);
+	usb.configurePdo(2, 15000, 3000);
+
+	// pdo number expected {1,2,3}
+	RF_CALL_BLOCKING(usb.setValidPdo(2+1));
+
+	// check results
+	modm::delay(100ms);
+	auto status = RF_CALL_BLOCKING(usb.getRdoRegStatus());
+	auto r = Iron::AnalogReadings::readAll();
+
+	Iron::Display::display.setCursor(0,16);
+	Iron::Display::display.printf("UIn %03.2f V", r.uIn);
+	Iron::Display::display.setCursor(0,32);
+	Iron::Display::display.printf("Max %04ld mA", status.MaxCurrent);
+	Iron::Display::display.setCursor(0,48);
+	Iron::Display::display.printf("Ops %04ld mA", status.OperatingCurrent);
+	Iron::Display::display.update();
+
+	modm::delay(5s);
 
 	/*
 	* use PID with [K] temperatures
