@@ -20,7 +20,7 @@
 
 #include "hardware.hpp"
 
-#include "stusb4500.hpp"
+#include <modm/driver/usb/stusb4500.hpp>
 
 // modm::IODeviceWrapper<modm::platform::UsbUart0, modm::IOBuffer::DiscardIfFull> loggerDevice;
 // modm::log::Logger modm::log::debug(loggerDevice);
@@ -43,7 +43,7 @@ using namespace modm::literals;
 
 modm::Pid<float, 1> pid;
 
-Stusb4500<Iron::Display::MyI2cMaster> usb{};
+modm::Stusb4500<Iron::Display::MyI2cMaster> usb{};
 
 class AdcThread : public modm::pt::Protothread
 {
@@ -245,16 +245,16 @@ int main()
 	Iron::Ui::initialize();
 
 
-	RF_CALL_BLOCKING(usb.configurePdo(0, 5000, 500));
-	RF_CALL_BLOCKING(usb.configurePdo(1, 20000, 1500));
-	RF_CALL_BLOCKING(usb.configurePdo(2, 20000, 4000));
+	RF_CALL_BLOCKING(usb.configurePdo(1, 5000, 500));
+	RF_CALL_BLOCKING(usb.configurePdo(2, 20000, 1500));
+	RF_CALL_BLOCKING(usb.configurePdo(3, 20000, 4000));
 
 	// pdo number expected {1,2,3}
 	RF_CALL_BLOCKING(usb.setValidPdo(3));
 
 	// check results
 	modm::delay(200ms);
-	stusb4500::RdoRegStatusData status = RF_CALL_BLOCKING(usb.getRdoRegStatus());
+	modm::stusb4500::RdoRegStatusData status = RF_CALL_BLOCKING(usb.getRdoRegStatus());
 	auto r = Iron::AnalogReadings::readAll();
 
 	Iron::Display::initialize();

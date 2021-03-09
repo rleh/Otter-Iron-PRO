@@ -19,6 +19,7 @@
     <module>modm:processing:protothread</module>
     <module>modm:processing:timer</module>
     <module>modm:driver:ssd1306</module>
+    <module>modm:driver:stusb4500</module>
     <module>modm:container</module>
     <module>modm:platform:i2c:1</module>
     <module>modm:platform:timer:1</module>
