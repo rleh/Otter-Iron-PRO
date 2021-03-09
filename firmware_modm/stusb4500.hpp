@@ -1,3 +1,8 @@
+#ifndef STUSB4500_HPP
+#define STUSUB4500_HPP
+
+#include <modm/architecture/interface/i2c_device.hpp>
+
 struct stusb4500
 {
 protected: 
@@ -18,17 +23,17 @@ protected:
         DpmSnkPdo2 = 0x89,
         DpmSnkPdo3 = 0x8D,
     };
-
+public:
     struct RdoRegStatusData {
-        uint32_t MaxCurrent                     :       10; //Bits 9..0
-        uint32_t OperatingCurrent               :       10; //Bits 19..10
+        uint32_t MaxCurrent             ; //Bits 9..0
+        uint32_t OperatingCurrent       ; //Bits 19..10
         // uint8_t reserved_22_20                  :       3;
         // uint8_t UnchunkedMess_sup               :       1;
         // uint8_t UsbSuspend                      :       1;
         // uint8_t UsbComCap                       :       1;
         // uint8_t CapaMismatch                    :       1;
         // uint8_t GiveBack                        :       1;
-        uint8_t ObjectPos                       :       3; //Bits 30..28 (3-bit)
+        uint8_t ObjectPos               ; //Bits 30..28 (3-bit)
     };
 };
 
@@ -42,31 +47,50 @@ public:
     inline modm::ResumableResult<RdoRegStatusData>
     getRdoRegStatus( ) {
         RF_BEGIN();
-        readRegister<4>(Register::RdoRegStatus, reinterpret_cast<uint8_t*>(&buffer2));
-        // FIXME: Endianess?!?
-        rdoRegStatusData.MaxCurrent = buffer2 & 0b11'1111'1111;
-        rdoRegStatusData.OperatingCurrent = (buffer2 >> 10) & 0b11'1111'1111;
-        rdoRegStatusData.ObjectPos = (buffer2 >> 28) & 0b111;
+        RF_CALL(readRegister<4>(Register::RdoRegStatus, buffer2.data()));
+        RF_WAIT_WHILE(this->isTransactionRunning());
+        rdoRegStatusData.MaxCurrent = buffer2.at(0) | ((buffer2.at(1) & 0b11) << 8);
+        rdoRegStatusData.MaxCurrent *= 10;
+        rdoRegStatusData.OperatingCurrent = ((buffer2.at(1) & 0b1111'1100) >> 2) | ((buffer2.at(2) & 0b1111) << 6);
+        rdoRegStatusData.OperatingCurrent *= 10;
+        rdoRegStatusData.ObjectPos = ( buffer2.at(3) & 0b0110'0000 ) >> 5;
+
+        // // FIXME: Endianess?!?
+        // buffer3 = static_cast<uint32_t>(buffer2.at(0) + (buffer2.at(1)<<8) + (buffer2.at(2)<<16) + (buffer2.at(3)<<24));
+        // rdoRegStatusData.MaxCurrent = buffer3 & 0b11'1111'1111;
+        // rdoRegStatusData.OperatingCurrent = (buffer3 >> 10) & 0b11'1111'1111;
+        // rdoRegStatusData.ObjectPos = (buffer3 >> 28) & 0b111;
         RF_END_RETURN(rdoRegStatusData);
     }
 
 	inline modm::ResumableResult<void>
-	configurePdo(uint8_t pdoNumber, uint16_t voltage, uint16_t current)
+	configurePdo(uint8_t pdoNumber, uint32_t voltage, uint32_t current)
 	{
         RF_BEGIN();
-        readRegister<4>(DpmSnkPdos.at(pdoNumber), reinterpret_cast<uint8_t*>(&buffer2));
-        // FIXME: Endianess?!?
-        buffer2 = (buffer2 & ~0b11'1111'1111ul) | ((current / 10) & 0b11'1111'1111);
-        buffer2 = (buffer2 & ((~0b11'1111'1111ul) << 10)) | (((voltage / 50) & 0b11'1111'1111) << 10);
-        updateRegister<4>(DpmSnkPdos.at(pdoNumber), reinterpret_cast<uint8_t*>(&buffer2));
+        RF_CALL(readRegister<4>(DpmSnkPdos.at(pdoNumber), buffer2.data()));
+        RF_WAIT_WHILE(this->isTransactionRunning());
+        
+        current /= 10;
+        voltage /= 50;
+        buffer2.at(0) = (uint8_t) current; // first 8 bits of 10 bit current
+        buffer2.at(1) = ((current >> 8) & 0b11); // other 2 bits of 10 bit current
+        buffer2.at(1) = buffer2.at(1) | (( voltage & 0b11'1111 ) << 2 );      
+        buffer2.at(2) = ( buffer2.at(2) & 0b1111'0000 ) | ( ( voltage >> 6 ) & 0b1111);
+        // TODO: reduce number of buffers in use to 1 :-)
+        // buffer3 = static_cast<uint32_t>(buffer2.at(0) | (buffer2.at(1)<<8) | (buffer2.at(2)<<16) | (buffer2.at(3)<<24));
+        // buffer3 = (buffer3 & (~0b11'1111'1111ul)) | ((current / 10) & 0b11'1111'1111ul);
+        // buffer3 = (buffer3 & ((~0b11'1111'1111ul) << 10)) | (((voltage / 50) & 0b11'1111'1111ul) << 10);
+        RF_CALL(updateRegister<4>(DpmSnkPdos.at(pdoNumber), buffer2.data()));
+        RF_WAIT_WHILE(this->isTransactionRunning());
         RF_END();
 	}
 
-	inline modm::ResumableResult<bool>
+	inline modm::ResumableResult<void>
 	setValidPdo(uint8_t pdoNumber)
 	{
         RF_BEGIN();
-        updateRegister<1>(Register::DpmPdoNumb, &pdoNumber);
+        RF_CALL(updateRegister<1>(Register::DpmPdoNumb, &pdoNumber));
+        RF_WAIT_WHILE((this->isTransactionRunning()));
         RF_END();
 	}
 
@@ -96,7 +120,10 @@ private:
 private: 
     static constexpr std::array<Register, 3> DpmSnkPdos {Register::DpmSnkPdo1, Register::DpmSnkPdo2, Register::DpmSnkPdo3}; 
     std::array<uint8_t, 5> buffer;
-    uint32_t buffer2;
+    std::array<uint8_t, 4> buffer2;
+    uint32_t buffer3;
     RdoRegStatusData rdoRegStatusData;
 
 };
+
+#endif // STUSUB4500_HPP
