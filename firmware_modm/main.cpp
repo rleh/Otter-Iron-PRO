@@ -20,6 +20,7 @@
 
 #include "hardware.hpp"
 
+#include <modm/driver/usb/stusb4500.hpp>
 
 // modm::IODeviceWrapper<modm::platform::UsbUart0, modm::IOBuffer::DiscardIfFull> loggerDevice;
 // modm::log::Logger modm::log::debug(loggerDevice);
@@ -36,9 +37,13 @@
 
 using namespace std::literals::chrono_literals;
 
+using namespace modm::literals;
+
 #define UTILS_LP_FAST(value, sample, filter_constant)	(value -= (filter_constant) * ((value) - (sample)))
 
 modm::Pid<float, 1> pid;
+
+modm::Stusb4500<Iron::Display::MyI2cMaster> usb{};
 
 class AdcThread : public modm::pt::Protothread
 {
@@ -87,7 +92,7 @@ AdcThread adcThread;
 class PidThread : public modm::pt::Protothread
 {
 public:
-	PidThread() : pidTimer(10ms), tSetpoint(100.0f)
+	PidThread() : pidTimer(10ms), tSetpoint(320.0f)
 	{
 
 	}
@@ -128,13 +133,11 @@ public:
 
 	float tSetpoint;
 	float duty;
-	float dutyLimit;
-
+	float powerLimit; // [W]
 private:
 	modm::PeriodicTimer pidTimer;
 	float tTipLp;
-	float powerLimit = 60; // [W]
-
+	float dutyLimit;
 };
 PidThread pidThread;
 
@@ -231,17 +234,99 @@ int main()
 	// modm::delay(100ms);
 	// MODM_LOG_INFO << "Connection Successfull" << modm::endl;
 
+	Iron::Display::MyI2cMaster::connect<
+		Iron::Display::Scl::Scl, 
+		Iron::Display::Sda::Sda>();
+	Iron::Display::MyI2cMaster::initialize<Iron::SystemClock, 400_kHz>();
+
+
 	Iron::Pwm::initialize();
-	Iron::Display::initialize();
 	Iron::AnalogReadings::initialize();
 	Iron::Ui::initialize();
 
 
-	Iron::Display::display.setCursor(0,32);
-	Iron::Display::display.printf("ping");
+	RF_CALL_BLOCKING(usb.configurePdo(1, 5000, 500));
+	RF_CALL_BLOCKING(usb.configurePdo(2, 20000, 1500));
+	RF_CALL_BLOCKING(usb.configurePdo(3, 20000, 4000));
+
+	// pdo number expected {1,2,3}
+	RF_CALL_BLOCKING(usb.setValidPdo(3));
+
+	// check results
+	modm::delay(200ms);
+	modm::stusb4500::RdoRegStatusData status = RF_CALL_BLOCKING(usb.getRdoRegStatus());
+	auto r = Iron::AnalogReadings::readAll();
+
+	Iron::Display::initialize();
+	Iron::Display::display.clear();
+	// Iron::Display::display.setCursor(0,0);
+	// Iron::Display::display.printf("Docker build");
+	
+	Iron::Display::display.setCursor(0,0);
+	Iron::Display::display.printf("USB PD... ");
 	Iron::Display::display.update();
 
+	Iron::Display::display.setCursor(60,0);
+	Iron::Display::display.printf("OP %1d", status.ObjectPos);
+	Iron::Display::display.setCursor(0,16);
+	Iron::Display::display.printf("UIn %03.2f V", r.uIn);
+	Iron::Display::display.setCursor(0,32);
+	Iron::Display::display.printf("Max %04ld mA", status.MaxCurrent);
+	Iron::Display::display.setCursor(0,48);
+	pidThread.powerLimit = status.MaxCurrent*r.uIn/1000; // [W]
+	Iron::Display::display.printf("Pwr %03.2f W", pidThread.powerLimit);
+	Iron::Display::display.update();
 
+	modm::delay(5s);
+
+	if ( status.MaxCurrent == 0 ){
+		uint32_t maxManualCurrent = 0; // [mA]
+		const uint16_t step = 500; //[mA]
+		auto updateDisp = [&maxManualCurrent](){
+				Iron::Display::display.clear();
+				Iron::Display::display.setCursor(0,0);
+				Iron::Display::display.printf("No USB PD");
+				Iron::Display::display.setCursor(0,16);
+				Iron::Display::display.printf("Select current!");
+				Iron::Display::display.setCursor(0,48);
+				Iron::Display::display.printf("Ack with +&-");
+				Iron::Display::display.setCursor(0,32);
+				Iron::Display::display.printf("Max %04ld mA", maxManualCurrent);
+				Iron::Display::display.update();
+			};
+		updateDisp();
+		modm::delay(200ms);
+		while( true ) {
+			if ( Iron::Ui::ButtonUp::read() ) {
+				modm::delay(200ms);
+				if ( Iron::Ui::ButtonUp::read() && Iron::Ui::ButtonDown::read() ) break;
+				else maxManualCurrent += step;
+				if ( maxManualCurrent > 10000 ) maxManualCurrent = 10000; 
+				updateDisp();
+			}
+			else if ( Iron::Ui::ButtonDown::read() ) {
+				modm::delay(200ms);
+				if ( Iron::Ui::ButtonUp::read() && Iron::Ui::ButtonDown::read() ) break;
+				else {
+					if ( maxManualCurrent >= step ) maxManualCurrent-=step;
+				}
+				updateDisp();		 
+			} 
+
+		}
+		Iron::Display::display.clear();
+		Iron::Display::display.setCursor(0,16);
+		Iron::Display::display.printf("Max %04ld mA", maxManualCurrent);
+		Iron::Display::display.setCursor(0,32);
+		pidThread.powerLimit = maxManualCurrent*r.uIn/1000; // [W]
+		Iron::Display::display.printf("Pwr %03.2f W", pidThread.powerLimit);
+		Iron::Display::display.update();
+		modm::delay(5s);
+	}
+
+
+
+	Iron::Display::MyI2cMaster::initialize<Iron::SystemClock, 1200_kHz>();
 	/*
 	* use PID with [K] temperatures
 	*/

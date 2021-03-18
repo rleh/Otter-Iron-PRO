@@ -111,8 +111,6 @@ namespace Display {
 	inline void
 	initialize()
 	{
-        MyI2cMaster::connect<Scl::Scl, Sda::Sda>();
-        MyI2cMaster::initialize<Iron::SystemClock, 1200_kHz>();
 
         display.initializeBlocking();
 		display.setFont(modm::font::Assertion);
